@@ -53,7 +53,7 @@ class SolHunterApp(ctk.CTk):
             try:
                 with open(CONFIG_FILE, "r") as f: return json.load(f)
             except: pass
-        return {"discord_token": "", "target_channels": [], "biomes": {}, "webhook_url": "", "auto_kill_roblox": False}
+        return {"discord_token": "", "target_channels": [1282542323590496277], "biomes": {}, "webhook_url": "", "auto_kill_roblox": False}
 
     def save_config(self):
         self.config["discord_token"] = self.token_entry.get()
