@@ -6,22 +6,55 @@ class MessageParser:
     Parses Discord message content to detect Biomes and extract Roblox connection details.
     """
     
-    PS_LINK_PATTERN = re.compile(r"roblox\.com/games/(\d+)(?:/[\w-]+)?\?.*privateServerLinkCode=(\w+)")
-    
+    PS_LINK_PATTERN = re.compile(r"roblox\.com/games/(\d+)[^?]*\?.*privateServerLinkCode=([\w-]+)")
+    SHARE_CODE_PATTERN = re.compile(r"(?:roblox\.com|ro\.blox\.com)/share\?code=([a-f0-9]+)&type=Server")
+    DEEPLINK_PATTERN = re.compile(r"(?:roblox\.com|ro\.blox\.com)/games/start\?placeId=(\d+)(?:&launchData=([^&]+))?")
+    ROPRO_PATTERN = re.compile(r"https?://(?:www\.)?(?:ro\.pro|ropro\.io)/(?:join/)?([a-zA-Z0-9]+)")
+    REDIRECT_GAME_PATTERN = re.compile(r"launchData=(?:(\d+)/)?([a-f0-9\-]+)")
+
     @staticmethod
     def extract_link_data(content: str) -> dict | None:
         """
-        Scans a string for a Roblox Private Server link.
-        
-        Returns:
-            dict containing 'place_id' and 'link_code' if found, else None.
+        Scans a string for various Roblox server links using robust extraction.
         """
-        match = MessageParser.PS_LINK_PATTERN.search(content)
-        if match:
+        # 1. Standard Private Server Link & Deep Links (Improved Regex)
+        # Matches both roblox.com and ro.blox.com, finds placeId and linkCode regardless of order
+        ps_pattern = re.compile(r"(?:roblox\.com|ro\.blox\.com)/(?:games|games/start)\?.*?placeId=(\d+)", re.I)
+        code_pattern = re.compile(r"privateServerLinkCode=([^&\s?]+)", re.I)
+        
+        # Matches URL with path: /games/12345/name?privateServerLinkCode=...
+        path_pattern = re.compile(r"roblox\.com/games/(\d+)/[^?]*\?.*?privateServerLinkCode=([^&\s?]+)", re.I)
+
+        # Check path format first (most common on Discord)
+        path_match = path_pattern.search(content)
+        if path_match:
             return {
-                "place_id": match.group(1),
-                "link_code": match.group(2)
+                "place_id": path_match.group(1),
+                "link_code": path_match.group(2),
+                "type": "private_server"
             }
+
+        # Check Query format (placeId=...)
+        ps_match = ps_pattern.search(content)
+        if ps_match:
+            place_id = ps_match.group(1)
+            code_match = code_pattern.search(content)
+            if code_match:
+                return {
+                    "place_id": place_id,
+                    "link_code": code_match.group(1),
+                    "type": "private_server"
+                }
+
+        # 2. Share Code Link (New feature) - Ensures full code extraction
+        share_match = re.search(r"(?:roblox\.com|ro\.blox\.com)/share\?code=([^&\s?]+)", content, re.I)
+        if share_match:
+            return {
+                "place_id": "15532592330", # Sol's RNG default
+                "link_code": share_match.group(1),
+                "type": "share_code"
+            }
+
         return None
 
     # Biome Keyword Mapping (Expanded based on user request)

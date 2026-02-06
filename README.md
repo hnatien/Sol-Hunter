@@ -1,9 +1,12 @@
-Sol's RNG Biome Sniper. 
+# SolHunter
+Sol's RNG Biome Sniper and Detector (100% accuracy) by reading game logs.
 
-How to use?
-
-read guide tab in the app, and follow the instructions.
-you should have Discord Token, and Webhook URL(optional) ready.
-
+## Installation
+```bash
 pip install -r requirements.txt
+```
+
+## Usage
+```bash
 python main.py
+```

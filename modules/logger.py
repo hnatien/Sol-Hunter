@@ -22,14 +22,18 @@ class LoggerDetector:
         # Webhook Settings
         self.webhookUrl = ""
         self.accountName = "Unknown"
+        self.minRollRarity = 1000000 # Default 1M
         self.startTime = None
         self.currentBiome = "NORMAL"
         self.biomeStartTime = None
+        self.currentAura = "None"
         
         # Detection regex patterns
         self.BIOME_PATTERN = re.compile(r"\[BloxstrapRPC\].*?(NORMAL|WINDY|RAINY|SNOWY|SAND STORM|HELL|STARFALL|CORRUPTION|NULL|GLITCHED|DREAMSPACE|CYBERSPACE)")
         self.MERCHANT_PATTERN = re.compile(r"\[Merchant\]: (Mari|Jester) has arrived on the island")
-        self.AURA_PATTERN = re.compile(r'"state":"Equipped \\"(.*?)\\"')
+        # Reliable patterns for Sols RNG Aura Detection via Bloxstrap RPC
+        self.AURA_PATTERN = re.compile(r'"details":"Equipped: (.*?)"', re.I)
+        self.ROLL_PATTERN = re.compile(r'You rolled: (.*?) \((.*?)\)', re.I)
 
     def log(self, message: str):
         if self.logCallback:
@@ -104,15 +108,16 @@ class LoggerDetector:
             return max(files, key=os.path.getmtime)
         except: return None
 
-    def startDetection(self, webhookUrl="", accountName="Unknown"):
+    def startDetection(self, webhookUrl="", accountName="Unknown", minRollRarity=1000000):
         if self.isRunning: return
         self.webhookUrl = webhookUrl
         self.accountName = accountName
+        self.minRollRarity = minRollRarity
         self.startTime = datetime.now()
         self.isRunning = True
         self.detectionThread = Thread(target=self.detectionLoop, daemon=True)
         self.detectionThread.start()
-        self.log(f"Log detection started for account: {accountName}")
+        self.log(f"Log detection started for account: {accountName} (Min Rarity: {minRollRarity:,})")
         self.sendStartWebhook()
 
     def sendStartWebhook(self):
@@ -120,14 +125,14 @@ class LoggerDetector:
         if not self.webhookUrl: return
         now = datetime.now()
         embed = {
-            "title": "SOLS HUNTER Started",
+            "title": "SolHunter Started",
             "color": 0x55ff55, # Green accent sidebar
             "fields": [
-                {"name": "SOLS HUNTER", "value": "‎", "inline": False}, # Blank char for spacing
+                {"name": "SolHunter", "value": "‎", "inline": False}, # Blank char for spacing
                 {"name": "Accounts Configured", "value": "1", "inline": True},
                 {"name": "Webhooks Configured", "value": "1", "inline": True}
             ],
-            "footer": {"text": "SOLS HUNTER v1.0 • Hôm nay lúc " + now.strftime("%H:%M %p")},
+            "footer": {"text": "SolHunter v1.0 • Today at " + now.strftime("%I:%M %p")},
         }
         try:
             requests.post(self.webhookUrl, json={"embeds": [embed]}, timeout=5)
@@ -174,9 +179,9 @@ class LoggerDetector:
         
         # Relative time for "Started"
         if status == "Started":
-            startedStr = "Vừa mới đây"
+            startedStr = "Just now"
         else:
-            startedStr = "Đã kết thúc"
+            startedStr = "Ended"
 
         color = 0x6c5ce7 if status == "Started" else 0x3d3d3d # Purple for start, Dark for end
         
@@ -187,8 +192,7 @@ class LoggerDetector:
                 {"name": "Account", "value": self.accountName, "inline": False},
                 {"name": "Uptime", "value": uptimeStr, "inline": True}
             ],
-            "footer": {"text": "SolHunter v1.0 • Hôm nay lúc " + now.strftime("%H:%M %p")},
-            "timestamp": now.isoformat()
+            "footer": {"text": "SolHunter v1.0 • Today at " + now.strftime("%I:%M %p")}
         }
         
         if status == "Started":
@@ -222,6 +226,33 @@ class LoggerDetector:
             self.log(f"Merchant Detected: {merchantName}")
             self.sendMerchantWebhook(merchantName)
 
+        # Aura Detection (Equipped)
+        auraMatch = self.AURA_PATTERN.search(line)
+        if auraMatch:
+            newAura = auraMatch.group(1).strip()
+            if newAura != self.currentAura and newAura != "":
+                self.currentAura = newAura
+                self.log(f"New Aura Equipped: {newAura}")
+                self.sendAuraWebhook(newAura)
+
+        # Rare Roll Detection
+        rollMatch = self.ROLL_PATTERN.search(line)
+        if rollMatch:
+            auraName = rollMatch.group(1).strip()
+            rarityStr = rollMatch.group(2).strip() # e.g. "1 in 5,000"
+            
+            # Parse numeric rarity
+            try:
+                # Extract number from "1 in 5,000" or similar
+                cleanRarity = re.sub(r'[^\d]', '', rarityStr.split('in')[-1])
+                rarityValue = int(cleanRarity)
+                
+                if rarityValue >= self.minRollRarity:
+                    self.log(f"RARE ROLL: {auraName} ({rarityStr})")
+                    self.sendRollWebhook(auraName, rarityStr)
+            except Exception as e:
+                self.log(f"Roll Parse Error: {e}")
+
     def sendMerchantWebhook(self, merchantName):
         if not self.webhookUrl: return
         embed = {
@@ -230,8 +261,39 @@ class LoggerDetector:
             "fields": [
                 {"name": "Account", "value": self.accountName, "inline": False}
             ],
-            "footer": {"text": "SolHunter v1.0"},
-            "timestamp": datetime.now().isoformat()
+            "footer": {"text": f"SolHunter v1.0 • Today at {datetime.now().strftime('%I:%M %p')}"}
+        }
+        try: requests.post(self.webhookUrl, json={"embeds": [embed]}, timeout=5)
+        except: pass
+
+    def sendAuraWebhook(self, auraName):
+        if not self.webhookUrl: return
+        embed = {
+            "title": f"Aura Status Updated - {auraName}",
+            "description": f"Currently equipped on **{self.accountName}**",
+            "color": 0xa349a4, # Purple
+            "fields": [
+                {"name": "Status", "value": "`Equipped`", "inline": True},
+                {"name": "Account", "value": f"`{self.accountName}`", "inline": True}
+            ],
+            "footer": {"text": f"SolHunter v1.0 • Today at {datetime.now().strftime('%I:%M %p')}"}
+        }
+        try: requests.post(self.webhookUrl, json={"embeds": [embed]}, timeout=5)
+        except: pass
+
+    def sendRollWebhook(self, auraName, rarityStr):
+        if not self.webhookUrl: return
+        now = datetime.now()
+        embed = {
+            "title": f"INSANE ROLL DETECTED!",
+            "description": f"**{self.accountName}** just rolled a rare aura!",
+            "color": 0xff4757, # Vibrant Red
+            "fields": [
+                {"name": "Aura", "value": f"`{auraName}`", "inline": True},
+                {"name": "Rarity", "value": f"`{rarityStr}`", "inline": True},
+                {"name": "Account", "value": f"`{self.accountName}`", "inline": False}
+            ],
+            "footer": {"text": f"SolHunter v1.0 • Today at {now.strftime('%I:%M %p')}"}
         }
         try: requests.post(self.webhookUrl, json={"embeds": [embed]}, timeout=5)
         except: pass
