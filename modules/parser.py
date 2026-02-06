@@ -36,6 +36,12 @@ class MessageParser:
         "Heaven": ["heaven"]
     }
 
+    # Merchant Keyword Mapping
+    MERCHANT_KEYWORDS = {
+        "Jester": ["jester", "jes", "jesster"],
+        "Mari": ["mari", "marii", "lucky", "penny", "pennies"]
+    }
+
     BLACKLIST_KEYWORDS = {"bait", "fake", "aura", "chill", "stigma", "sol", "zero", "day", "dimension"}
 
     @staticmethod
@@ -50,5 +56,20 @@ class MessageParser:
             keywords = MessageParser.BIOME_KEYWORDS.get(biome, [biome.lower()])
             if any(kw in content_lower for kw in keywords):
                 return biome
+                
+        return None
+
+    @staticmethod
+    def check_merchants(content: str, active_merchants: list[str]) -> str | None:
+        """Checks for active merchants in content, returning None if blacklisted."""
+        content_lower = content.lower()
+        
+        if any(word in content_lower for word in MessageParser.BLACKLIST_KEYWORDS):
+            return None
+        
+        for merchant in active_merchants:
+            keywords = MessageParser.MERCHANT_KEYWORDS.get(merchant, [merchant.lower()])
+            if any(kw in content_lower for kw in keywords):
+                return merchant
                 
         return None

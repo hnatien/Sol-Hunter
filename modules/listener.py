@@ -10,11 +10,12 @@ class DiscordListener(discord.Client):
     """
     Discord Client (Self-bot) running in a separate thread.
     """
-    def __init__(self, token: str, target_channels: list[int], active_biomes: list[str], webhook_url: str = "", auto_kill: bool = False, log_callback: Optional[Callable[[str], None]] = None):
+    def __init__(self, token: str, target_channels: list[int], active_biomes: list[str], active_merchants: list[str] = [], webhook_url: str = "", auto_kill: bool = False, log_callback: Optional[Callable[[str], None]] = None):
         super().__init__()
         self.token = token
         self.target_channels = set(target_channels) # Optimize lookup
         self.active_biomes = active_biomes
+        self.active_merchants = active_merchants
         self.webhook_url = webhook_url
         self.auto_kill = auto_kill
         self.log_callback = log_callback
@@ -22,7 +23,7 @@ class DiscordListener(discord.Client):
         self.thread = threading.Thread(target=self._run_client, daemon=True, name="DiscordListenerThread")
         self._stop_event = asyncio.Event()
 
-    def send_webhook_notification(self, biome: str, link: str):
+    def send_webhook_notification(self, target_name: str, link: str, is_merchant: bool = False):
         """Sends a notification to the Discord Webhook."""
         if not self.webhook_url:
             return
@@ -30,10 +31,10 @@ class DiscordListener(discord.Client):
         import requests
         data = {
             "embeds": [{
-                "title": "🎯 Biome Sniped!",
-                "color": 7101671, # Purple
+                "title": f"🎯 {'Merchant' if is_merchant else 'Biome'} Sniped!",
+                "color": 15158332 if is_merchant else 7101671, # Red for Merchant, Purple for Biome
                 "fields": [
-                    {"name": "Biome", "value": biome, "inline": True},
+                    {"name": "Type", "value": target_name, "inline": True},
                     {"name": "Link", "value": f"[Join Server]({link})", "inline": False}
                 ],
                 "footer": {"text": "SOLS HUNTER v1.0"}
@@ -76,19 +77,44 @@ class DiscordListener(discord.Client):
 
     async def on_ready(self):
         self.log(f"Logged in as {self.user} (ID: {self.user.id})")
-        self.log(f"Monitoring {len(self.target_channels)} channels for {len(self.active_biomes)} biomes.")
+        self.log(f"Monitoring {len(self.target_channels)} channels.")
+        self.sendStartWebhook()
+
+    def sendStartWebhook(self):
+        """Sends a 'Tool Started' notification matching the user's requested UI."""
+        if not self.webhookUrl: return
+        import requests
+        from datetime import datetime
+        now = datetime.now()
+        embed = {
+            "title": "SOLS HUNTER Started (Sniper Mode)",
+            "color": 0x55ff55, # Green accent sidebar
+            "fields": [
+                {"name": "SOLS HUNTER", "value": "‎", "inline": False},
+                {"name": "Accounts Configured", "value": "1", "inline": True},
+                {"name": "Webhooks Configured", "value": "1", "inline": True}
+            ],
+            "footer": {"text": "SOLS HUNTER v1.0 • Hôm nay lúc " + now.strftime("%H:%M %p")},
+        }
+        try:
+            requests.post(self.webhookUrl, json={"embeds": [embed]}, timeout=5)
+        except: pass
 
     async def on_message(self, message: discord.Message):
         if message.channel.id not in self.target_channels:
             return
 
         detected_biome = MessageParser.check_biomes(message.content, self.active_biomes)
-        if not detected_biome:
+        detected_merchant = MessageParser.check_merchants(message.content, self.active_merchants)
+        
+        target_name = detected_biome or detected_merchant
+        if not target_name:
             return
 
+        is_merchant = detected_merchant is not None
         link_data = MessageParser.extract_link_data(message.content)
         if not link_data:
-            self.log(f"[{detected_biome}] Detected (No Link)")
+            self.log(f"[{target_name}] Detected (No Link)")
             return
 
         full_link = f"https://www.roblox.com/games/{link_data['place_id']}?privateServerLinkCode={link_data['link_code']}"
@@ -99,5 +125,5 @@ class DiscordListener(discord.Client):
             auto_kill=self.auto_kill
         )
         
-        self.log(f"⚡ SNIPED [{detected_biome}]! Launching...")
-        self.send_webhook_notification(detected_biome, full_link)
+        self.log(f"⚡ SNIPED [{target_name}]! Launching...")
+        self.send_webhook_notification(target_name, full_link, is_merchant=is_merchant)
