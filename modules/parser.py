@@ -99,10 +99,15 @@ class MessageParser:
         if any(word in contentLower for word in MessageParser.BLACKLIST_KEYWORDS):
             return None
         
+        # Remove URLs before checking keywords to avoid false positives in hex codes
+        cleanContent = re.sub(r'https?://\S+', '', contentLower)
+        
         for biome in activeBiomes:
             keywords = MessageParser.BIOME_KEYWORDS.get(biome, [biome.lower()])
-            if any(kw in contentLower for kw in keywords):
-                return biome
+            for kw in keywords:
+                # Use word boundaries to match exact keywords only (e.g., "404" but not "0404" in hex)
+                if re.search(rf"\b{re.escape(kw)}\b", cleanContent):
+                    return biome
                 
         return None
 
@@ -112,10 +117,13 @@ class MessageParser:
         
         if any(word in contentLower for word in MessageParser.BLACKLIST_KEYWORDS):
             return None
+
+        cleanContent = re.sub(r'https?://\S+', '', contentLower)
         
         for merchant in activeMerchants:
             keywords = MessageParser.MERCHANT_KEYWORDS.get(merchant, [merchant.lower()])
-            if any(kw in contentLower for kw in keywords):
-                return merchant
+            for kw in keywords:
+                if re.search(rf"\b{re.escape(kw)}\b", cleanContent):
+                    return merchant
                 
         return None

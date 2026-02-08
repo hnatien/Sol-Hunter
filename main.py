@@ -47,7 +47,7 @@ class Sidebar(ctk.CTkFrame):
 
     def setupNavButtons(self):
         self.buttons = {}
-        pages = [("Dashboard", ""), ("AFK Mode", ""), ("Live Logs", ""), ("User Guide", "")]
+        pages = [("Sniper", ""), ("AFK Mode", ""), ("Live Logs", ""), ("User Guide", "")]
         
         for i, (name, icon) in enumerate(pages):
             btn = ctk.CTkButton(
@@ -69,7 +69,7 @@ class Sidebar(ctk.CTkFrame):
 
     def setActive(self, pageName: str):
         for name, btn in self.buttons.items():
-            isActive = (name == pageName) or (name == "User Guide" and pageName == "Guide") or (name == "Live Logs" and pageName == "Logs") or (name == "AFK Mode" and pageName == "AFK")
+            isActive = (name == pageName) or (name == "User Guide" and pageName == "Guide") or (name == "Live Logs" and pageName == "Logs") or (name == "AFK Mode" and pageName == "AFK") or (name == "Sniper" and pageName == "Sniper")
             
             btn.configure(
                 fg_color=Theme.HOVER if isActive else "transparent",
@@ -83,7 +83,7 @@ class Sidebar(ctk.CTkFrame):
         self.statusText.configure(text=f"Status: {text}", text_color=color if isActive else Theme.TEXT_SUB)
 
 
-class DashboardPage(ctk.CTkScrollableFrame):
+class SniperPage(ctk.CTkScrollableFrame):
     def __init__(self, master, app):
         super().__init__(master, fg_color="transparent", corner_radius=0)
         self.app = app
@@ -180,11 +180,11 @@ class SolHunterApp(ctk.CTk):
         self.createPages()
         
         self.loadConfig()
-        self.selectPage("Dashboard")
+        self.selectPage("Sniper")
         self.showToast("System Initialized", duration=2000, color=Theme.SUCCESS)
 
     def createPages(self):
-        self.pages["Dashboard"] = DashboardPage(self.contentArea, self)
+        self.pages["Sniper"] = SniperPage(self.contentArea, self)
         self.pages["AFK Mode"] = self.createAfkPage()
         self.pages["Live Logs"] = self.createLogsPage()
         self.pages["User Guide"] = self.createGuidePage()
