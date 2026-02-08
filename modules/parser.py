@@ -2,62 +2,78 @@ import re
 import logging
 
 class MessageParser:
-    """
-    Parses Discord message content to detect Biomes and extract Roblox connection details.
-    """
-    
-    PS_LINK_PATTERN = re.compile(r"roblox\.com/games/(\d+)[^?]*\?.*privateServerLinkCode=([\w-]+)")
-    SHARE_CODE_PATTERN = re.compile(r"(?:roblox\.com|ro\.blox\.com)/share\?code=([a-f0-9]+)&type=Server")
-    DEEPLINK_PATTERN = re.compile(r"(?:roblox\.com|ro\.blox\.com)/games/start\?placeId=(\d+)(?:&launchData=([^&]+))?")
-    ROPRO_PATTERN = re.compile(r"https?://(?:www\.)?(?:ro\.pro|ropro\.io)/(?:join/)?([a-zA-Z0-9]+)")
-    REDIRECT_GAME_PATTERN = re.compile(r"launchData=(?:(\d+)/)?([a-f0-9\-]+)")
+    PS_LINK_PATTERN = re.compile(r"roblox\.com/games/(\d+)[^?]*\?.*?(?:privateServerLinkCode|linkCode|code)=([\w-]+)", re.I)
+    SHARE_CODE_PATTERN = re.compile(r"(?:roblox\.com|ro\.blox\.com)/share\?code=([a-f0-9]+)", re.I)
+    DEEPLINK_PATTERN = re.compile(r"(?:roblox\.com|ro\.blox\.com)/games/start\?placeId=(\d+)(?:&launchData=([^&]+))?", re.I)
+    ROPRO_PATTERN = re.compile(r"https?://(?:www\.)?(?:ro\.pro|ropro\.io)/(?:join/)?([a-zA-Z0-9]+)", re.I)
+    REDIRECT_PATTERN = re.compile(r"launchData=(\d+)/([a-f0-9\-]+)", re.I)
+    DIRECT_ROBLOX_PATTERN = re.compile(r"roblox://placeId=(\d+)(?:&linkCode=([\w-]+))?", re.I)
 
     @staticmethod
-    def extract_link_data(content: str) -> dict | None:
-        """
-        Scans a string for various Roblox server links using robust extraction.
-        """
-        # 1. Standard Private Server Link & Deep Links (Improved Regex)
-        # Matches both roblox.com and ro.blox.com, finds placeId and linkCode regardless of order
-        ps_pattern = re.compile(r"(?:roblox\.com|ro\.blox\.com)/(?:games|games/start)\?.*?placeId=(\d+)", re.I)
-        code_pattern = re.compile(r"privateServerLinkCode=([^&\s?]+)", re.I)
-        
-        # Matches URL with path: /games/12345/name?privateServerLinkCode=...
-        path_pattern = re.compile(r"roblox\.com/games/(\d+)/[^?]*\?.*?privateServerLinkCode=([^&\s?]+)", re.I)
-
-        # Check path format first (most common on Discord)
-        path_match = path_pattern.search(content)
-        if path_match:
+    def extractLinkData(content: str) -> dict | None:
+        # 1. Direct roblox:// links
+        directMatch = MessageParser.DIRECT_ROBLOX_PATTERN.search(content)
+        if directMatch:
             return {
-                "place_id": path_match.group(1),
-                "link_code": path_match.group(2),
+                "placeId": directMatch.group(1),
+                "linkCode": directMatch.group(2) if directMatch.group(2) else None,
                 "type": "private_server"
             }
 
-        # Check Query format (placeId=...)
-        ps_match = ps_pattern.search(content)
-        if ps_match:
-            place_id = ps_match.group(1)
-            code_match = code_pattern.search(content)
-            if code_match:
-                return {
-                    "place_id": place_id,
-                    "link_code": code_match.group(1),
-                    "type": "private_server"
-                }
-
-        # 2. Share Code Link (New feature) - Ensures full code extraction
-        share_match = re.search(r"(?:roblox\.com|ro\.blox\.com)/share\?code=([^&\s?]+)", content, re.I)
-        if share_match:
+        # 2. Private Server Links (standard format)
+        psMatch = MessageParser.PS_LINK_PATTERN.search(content)
+        if psMatch:
             return {
-                "place_id": "15532592330", # Sol's RNG default
-                "link_code": share_match.group(1),
+                "placeId": psMatch.group(1),
+                "linkCode": psMatch.group(2),
+                "type": "private_server"
+            }
+
+        # 3. Share Codes
+        shareMatch = MessageParser.SHARE_CODE_PATTERN.search(content)
+        if shareMatch:
+            return {
+                "placeId": "15532592330", # Default to Sol's RNG
+                "linkCode": shareMatch.group(1),
                 "type": "share_code"
+            }
+
+        # 4. Deeplinks / LaunchData
+        deepMatch = MessageParser.DEEPLINK_PATTERN.search(content)
+        if deepMatch:
+            placeId = deepMatch.group(1)
+            launchData = deepMatch.group(2)
+            
+            # Check if launchData contains a redirect (PlaceID/JobID)
+            if launchData:
+                redirMatch = MessageParser.REDIRECT_PATTERN.search(f"launchData={launchData}")
+                if redirMatch:
+                    return {
+                        "placeId": redirMatch.group(1),
+                        "jobId": redirMatch.group(2),
+                        "type": "job_id"
+                    }
+                return {
+                    "placeId": placeId,
+                    "launchData": launchData,
+                    "type": "launch_data"
+                }
+            return {
+                "placeId": placeId,
+                "type": "public_server"
+            }
+
+        # 5. RoPro Links
+        roproMatch = MessageParser.ROPRO_PATTERN.search(content)
+        if roproMatch:
+            return {
+                "placeId": "15532592330", # Default to Sol's RNG
+                "linkCode": roproMatch.group(1),
+                "type": "ropro"
             }
 
         return None
 
-    # Biome Keyword Mapping (Expanded based on user request)
     BIOME_KEYWORDS = {
         "Glitched": ["glitched", "glitch", "glig", "404", "4o4", "gl!tch"],
         "Cyberspace": ["cyberspace", "cyber", "ciber"],
@@ -69,7 +85,6 @@ class MessageParser:
         "Heaven": ["heaven"]
     }
 
-    # Merchant Keyword Mapping
     MERCHANT_KEYWORDS = {
         "Jester": ["jester", "jes", "jesster"],
         "Mari": ["mari", "marii", "lucky", "penny", "pennies"]
@@ -78,31 +93,29 @@ class MessageParser:
     BLACKLIST_KEYWORDS = {"bait", "fake", "aura", "chill", "stigma", "sol", "zero", "day", "dimension"}
 
     @staticmethod
-    def check_biomes(content: str, active_biomes: list[str]) -> str | None:
-        """Checks for active biomes in content, returning None if blacklisted."""
-        content_lower = content.lower()
+    def checkBiomes(content: str, activeBiomes: list[str]) -> str | None:
+        contentLower = content.lower()
         
-        if any(word in content_lower for word in MessageParser.BLACKLIST_KEYWORDS):
+        if any(word in contentLower for word in MessageParser.BLACKLIST_KEYWORDS):
             return None
         
-        for biome in active_biomes:
+        for biome in activeBiomes:
             keywords = MessageParser.BIOME_KEYWORDS.get(biome, [biome.lower()])
-            if any(kw in content_lower for kw in keywords):
+            if any(kw in contentLower for kw in keywords):
                 return biome
                 
         return None
 
     @staticmethod
-    def check_merchants(content: str, active_merchants: list[str]) -> str | None:
-        """Checks for active merchants in content, returning None if blacklisted."""
-        content_lower = content.lower()
+    def checkMerchants(content: str, activeMerchants: list[str]) -> str | None:
+        contentLower = content.lower()
         
-        if any(word in content_lower for word in MessageParser.BLACKLIST_KEYWORDS):
+        if any(word in contentLower for word in MessageParser.BLACKLIST_KEYWORDS):
             return None
         
-        for merchant in active_merchants:
+        for merchant in activeMerchants:
             keywords = MessageParser.MERCHANT_KEYWORDS.get(merchant, [merchant.lower()])
-            if any(kw in content_lower for kw in keywords):
+            if any(kw in contentLower for kw in keywords):
                 return merchant
                 
         return None

@@ -9,62 +9,52 @@ import platform
 pyautogui.FAILSAFE = False
 
 class AntiAFK:
-    def __init__(self, log_callback=None):
-        self.log_callback = log_callback
-        self.is_running = False
+    def __init__(self, logCallback=None):
+        self.logCallback = logCallback
+        self.isRunning = False
         self.thread = None
 
     def log(self, message):
-        if self.log_callback:
-            self.log_callback(f"[Anti-AFK] {message}")
+        if self.logCallback:
+            self.logCallback(f"[Anti-AFK] {message}")
         else:
             logging.info(f"[Anti-AFK] {message}")
 
     def start(self):
-        if self.is_running:
+        if self.isRunning:
             return
-        self.is_running = True
-        self.thread = threading.Thread(target=self._loop, daemon=True)
+        self.isRunning = True
+        self.thread = threading.Thread(target=self.runLoop, daemon=True)
         self.thread.start()
         self.log("Smart Anti-AFK Engaged")
 
     def stop(self):
-        self.is_running = False
+        self.isRunning = False
         if self.thread:
             self.thread.join(timeout=1)
         self.log("Anti-AFK Disengaged")
 
-    def _loop(self):
-        while self.is_running:
+    def runLoop(self):
+        while self.isRunning:
             try:
                 # Random interval between 2 to 4 minutes to prevent detection
-                wait_time = random.uniform(120, 240)
+                waitTime = random.uniform(120, 240)
                 
-                # Check if we are on Windows and if Roblox is running
                 if platform.system() == "Windows":
                     import psutil
-                    roblox_running = False
+                    robloxRunning = False
                     for proc in psutil.process_iter(['name']):
                         if proc.info['name'] == "RobloxPlayerBeta.exe":
-                            roblox_running = True
+                            robloxRunning = True
                             break
                     
-                    if not roblox_running:
+                    if not robloxRunning:
                         time.sleep(10)
                         continue
-
-                # Simulate a small movement or jump
-                # We use a simple 'jump' (spacebar)
-                # To be 'smart', we don't force focus, we just send the key
-                # Note: Roblox usually requires the window to be active for pyautogui.press
-                # But sometimes background keys work depending on the method.
-                # For 100% reliability we assume the user leaves it open.
                 
                 pyautogui.press('space')
                 self.log("Simulated activity (Jump)")
-                
-                # Small wait before checking again
-                time.sleep(wait_time)
+                time.sleep(waitTime)
                 
             except Exception as e:
                 self.log(f"Error: {e}")

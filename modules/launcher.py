@@ -2,20 +2,17 @@ import subprocess
 import logging
 import platform
 
-def kill_roblox() -> None:
-    """Forcefully terminates the Roblox process."""
+def killRoblox() -> None:
     try:
         import psutil
-        target_procs = ["RobloxPlayerBeta.exe", "Bloxstrap.exe"]
+        targetProcs = ["RobloxPlayerBeta.exe", "Bloxstrap.exe"]
         for proc in psutil.process_iter(['name']):
             try:
-                if proc.info['name'] in target_procs:
+                if proc.info['name'] in targetProcs:
                     proc.kill()
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
     except Exception as e:
-        import subprocess
-        import platform
         system = platform.system()
         if system == "Windows":
             subprocess.run(["taskkill", "/F", "/IM", "RobloxPlayerBeta.exe", "/T"], capture_output=True, shell=True)
@@ -23,43 +20,42 @@ def kill_roblox() -> None:
         elif system == "Darwin":
             subprocess.run(["killall", "-9", "RobloxPlayer"], capture_output=True)
 
-def launch_roblox(place_id: int | str, job_id: str | None = None, link_code: str | None = None, auto_kill: bool = False, link_type: str = "private_server") -> None:
-    """Launches Roblox via the roblox-player: protocol."""
-    if auto_kill:
-        kill_roblox()
+def launchRoblox(placeId: int | str, jobId: str | None = None, linkCode: str | None = None, autoKill: bool = False, linkType: str = "private_server", launchData: str | None = None) -> None:
+    if autoKill:
+        killRoblox()
         
-    if not place_id:
+    if not placeId:
         logging.error("Launch aborted: No Place ID provided.")
         return
 
-    # Use modern roblox:// protocol, less likely to be blocked
-    if link_type == "share_code" and link_code:
-        # Protocol for Share Codes
-        final_cmd = f"roblox://navigation/share_links?code={link_code}&type=Server"
-    elif link_code:
-        # Modern Private Server launch protocol (Bypasses many Access Denied errors)
-        # This format is equivalent to browser redirection to the app
-        final_cmd = f"roblox://experiences/start?placeId={place_id}&linkCode={link_code}"
-    elif job_id:
-        # Join via Job ID
-        final_cmd = f"roblox://experiences/start?placeId={place_id}&gameInstanceId={job_id}"
+    # Construct the base command using the most reliable protocol (placeId= format)
+    if linkType == "share_code" and linkCode:
+        finalCmd = f"roblox://navigation/share_links?code={linkCode}&type=Server"
+    elif linkType == "job_id" and jobId:
+        finalCmd = f"roblox://experiences/start?placeId={placeId}&gameInstanceId={jobId}"
+    elif linkCode:
+        # V3 style: roblox://placeId=...&linkCode=...
+        finalCmd = f"roblox://placeId={placeId}&linkCode={linkCode}"
+    elif launchData:
+        finalCmd = f"roblox://experiences/start?placeId={placeId}&launchData={launchData}"
+    elif jobId:
+        finalCmd = f"roblox://experiences/start?placeId={placeId}&gameInstanceId={jobId}"
     else:
-        # Join standard server
-        final_cmd = f"roblox://placeId={place_id}"
+        finalCmd = f"roblox://placeId={placeId}"
 
     try:
         system = platform.system()
         if system == "Windows":
             import os
-            os.startfile(final_cmd)
+            os.startfile(finalCmd)
         elif system == "Darwin":
-            subprocess.Popen(["open", final_cmd])
+            subprocess.Popen(["open", finalCmd])
         elif system == "Linux":
-            subprocess.Popen(["xdg-open", final_cmd])
+            subprocess.Popen(["xdg-open", finalCmd])
         else:
             logging.error(f"Unsupported OS: {system}")
             
-        logging.info(f"Launched Roblox: {final_cmd}")
+        logging.info(f"Launched Roblox: {finalCmd}")
             
     except Exception as e:
         logging.error(f"Failed to launch Roblox: {e}")
